@@ -1,0 +1,92 @@
+# =============================================================================
+# NeuraRoads ADAS - Jetson Nano deployment overrides
+# -----------------------------------------------------------------------------
+# The Jetson Nano (4GB, Maxwell 128-core, ~472 GFLOPS FP16) is FAR weaker than
+# the GTX 1660 SUPER. This file is a THIN OVERRIDE layer merged on top of
+# model_config.yaml (deep-merge in src/utils/config_loader.py) so the SAME code
+# runs on both targets - only the numbers change, no code forks.
+#
+# Usage:
+#   python src/deployment/jetson/jetson_inference.py \
+#       --source <video> --config-overlay configs/jetson_config.yaml
+#
+# Loaded by: ConfigLoader.load("model_config", overlay="jetson_config")
+# =============================================================================
+
+device:
+  mode: "auto"                 # auto -> CUDA (Maxwell) on Jetson
+  half_precision: true         # FP16 mandatory for usable speed on Nano
+  cudnn_benchmark: true
+
+detector:
+  # Smallest model for the Nano. From-scratch YOLOv8n weights are exported
+  # separately (train_yolo can train n as well). Falls back to whatever exists.
+  architecture: "yolov8n"
+  weights: "models/trained/neuraroads_yolov8n/weights/best.pt"
+  # On Jetson, ALWAYS prefer the TensorRT engine (INT8 if calibrated).
+  tensorrt_engine: "models/weights/neuraroads_yolov8n_int8.engine"
+  onnx_model: "models/weights/neuraroads_yolov8n.onnx"
+  backend: "tensorrt"          # engine-first; converter builds it on-device
+  imgsz: 416                   # smaller input for the Nano's memory/compute
+  conf_threshold: 0.30
+  max_detections: 100
+
+tracker:
+  type: "bytetrack"            # keep - it is the cheapest option
+  track_buffer: 20
+
+lane_detector:
+  # Deep lane net is too heavy for the Nano -> classical-only, still smoothed.
+  mode: "classical"
+  deep:
+    enabled: false
+  classical:
+    enabled: true
+  smoothing:
+    enabled: true
+
+bev:
+  enabled: true
+  output_size: [200, 260]      # smaller BEV canvas
+  update_every: 3              # BEV every 3rd frame + interpolate
+
+speed_estimator:
+  ego:
+    enabled: true
+    max_corners: 100           # fewer flow features to save CPU
+
+pipeline:
+  target_fps: 20               # realistic Nano target
+  process_width: 640
+  process_height: 384
+  cadence:
+    detection_every: 1
+    lane_every: 3              # classical lane every 3rd frame
+    bev_every: 3
+  threading:
+    enabled: true
+    queue_size: 4
+  adaptive_quality:
+    enabled: true
+    min_fps: 12                # Nano floor before auto-reducing quality
+
+video:
+  output_fps: 30               # Nano writes 30 FPS output
+  show_preview: false          # usually headless on the Nano
+
+visualization:
+  box_thickness: 1
+  font_scale: 0.45
+
+# ---------------------------------------------------------------------------
+# Jetson-specific power / clock / thermal hints (read by deployment scripts).
+# ---------------------------------------------------------------------------
+jetson:
+  # nvpmodel power mode: 0 = MAXN (10W), 1 = 5W. Use MAXN for demos.
+  nvpmodel_mode: 0
+  jetson_clocks: true          # lock clocks to max (src/deployment/jetson/*)
+  int8_calibration: true       # build INT8 engine (needs calibration images)
+  calibration_images: "data/datasets/images/val"
+  calibration_num_images: 200
+  workspace_gb: 2              # TensorRT builder workspace
+  swap_gb: 4                   # recommended zram/swap for building engines

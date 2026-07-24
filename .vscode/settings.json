@@ -1,0 +1,39 @@
+{
+    // --- NeuraRoads: force VSCode to use and auto-activate the project venv ---
+    // The interpreter that ships this project lives in ./venv (Python 3.12,
+    // CUDA 12.1 torch). Do NOT point this at the old, broken ./.venv.
+    "python.defaultInterpreterPath": "${workspaceFolder}\\venv\\Scripts\\python.exe",
+
+    // Auto-activate the venv in every new integrated terminal.
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+
+    // Let the built-in Python env manager use the auto-detected venv instead of
+    // the system interpreter (previous value blocked venv activation).
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python-envs.pythonProjects": [],
+
+    // Analysis / linting against the venv.
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}\\src"
+    ],
+    "python.analysis.autoImportCompletions": true,
+
+    // Testing (pytest) rooted at the project.
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "src/tests"
+    ],
+
+    // Keep the workspace clean of caches in the file explorer.
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true
+    },
+
+    // Silence albumentations' network version check during runs.
+    "terminal.integrated.env.windows": {
+        "NO_ALBUMENTATIONS_UPDATE": "1"
+    }
+}

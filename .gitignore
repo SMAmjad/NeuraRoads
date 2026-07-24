@@ -1,0 +1,50 @@
+# =============================================================================
+# NeuraRoads ADAS - .gitignore
+# =============================================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Virtual environments (both the old and the new project venv) ---
+venv/
+.venv/
+venv_jetson/
+env/
+
+# --- Trained weights / exports (large; keep out of git) ---
+models/trained/
+models/weights/*.pt
+models/weights/*.onnx
+models/weights/*.engine
+models/pretrained/*.pth
+*.pt
+*.onnx
+*.engine
+!models/**/.gitkeep
+
+# --- Datasets (large binary; tracked out of band) ---
+data/datasets/images/
+data/datasets/labels/
+data/raw/frames/
+
+# --- Generated results / logs ---
+src/results/videos/output_videos/*.mp4
+src/results/metrics/performance_logs/*.csv
+src/results/visualizations/detection_samples/*
+runs/
+*.log
+
+# --- Ultralytics runtime ---
+*.cache
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+*.swp
+
+# Keep the VSCode workspace settings that wire up the venv.
+!.vscode/settings.json

@@ -1,0 +1,157 @@
+# =============================================================================
+# NeuraRoads ADAS - Warning thresholds & icon mapping
+# -----------------------------------------------------------------------------
+# Drives src/adas/* (collision_detector, lane_departure, warning_system,
+# alert_manager). All danger levels, distances, TTC bands, icons and messages
+# live here so tuning never touches code.
+#
+# Loaded by: ConfigLoader.load("adas_thresholds")
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Bounding-box colour bands by distance (metres) OR TTC (seconds).
+# The stricter (more dangerous) of distance/TTC wins. Colours are looked up in
+# model_config.visualization.colors by name.
+# ---------------------------------------------------------------------------
+box_color_bands:
+  # name         distance_max_m   ttc_max_s   color_key
+  - {name: "danger",        distance_max_m: 10.0,  ttc_max_s: 3.0,  color_key: "danger"}
+  - {name: "too_close",     distance_max_m: 20.0,  ttc_max_s: 5.0,  color_key: "too_close"}
+  - {name: "getting_close", distance_max_m: 40.0,  ttc_max_s: 8.0,  color_key: "getting_close"}
+  - {name: "safe",          distance_max_m: 9999.0, ttc_max_s: 9999.0, color_key: "safe"}
+
+# ---------------------------------------------------------------------------
+# Forward Collision Warning System (FCWS)
+# Considers the closest in-path vehicle/object ahead of ego.
+# ---------------------------------------------------------------------------
+fcws:
+  enabled: true
+  # Only objects whose horizontal centre falls within this fraction of the
+  # frame width (centred) count as "in my path".
+  in_path_width_frac: 0.55
+  # Only consider objects in the lower part of the frame (closer road).
+  in_path_min_y_frac: 0.35
+  # A car you are merely FOLLOWING (gap steady) must NOT raise an alert on
+  # proximity alone. Distance-based caution/warning therefore require the gap to
+  # be closing at >= this speed...
+  min_closing_kmh: 4.0
+  # ...except inside this hard floor, which always warns (genuine tailgating).
+  hard_warn_distance_m: 6.0
+  levels:
+    normal:                          # road ahead clear
+      icon: "FCWS-normal.png"
+      color: "safe"
+      pulse: "none"
+      message: "ROAD CLEAR"
+    prompt:                          # caution
+      distance_m: [8.0, 15.0]        # <=15 m AND closing (see min_closing_kmh)
+      ttc_s: [3.0, 5.0]              # or TTC 3-5 s
+      icon: "FCWS-prompt.png"
+      color: "getting_close"
+      pulse: "slow"
+      message: "CAUTION, Reduce Speed"
+    warning:                         # imminent collision
+      distance_m: [0.0, 10.0]        # under 10 m
+      ttc_s: [0.0, 3.0]              # or TTC under 3 s
+      icon: "fcws-warning.png"
+      color: "danger"
+      pulse: "fast"
+      screen_tint: [0, 0, 255]       # slight red screen tint (BGR)
+      screen_tint_alpha: 0.12
+      message: "COLLISION WARNING, BRAKE NOW"
+
+# ---------------------------------------------------------------------------
+# Pedestrian alert (vulnerable road users: Pedestrian, Ped on Bike)
+# ---------------------------------------------------------------------------
+pedestrian:
+  enabled: true
+  icon: "warn.png"
+  # Orange at trigger distance, ramps to red as they approach.
+  trigger_distance_m: 15.0
+  critical_distance_m: 6.0
+  color_far: "too_close"             # orange
+  color_near: "danger"               # red
+  pulse: "slow"
+  message: "PEDESTRIAN ALERT"
+  # Only alert for peds roughly ahead (centre band), like fcws.in_path_width_frac
+  in_path_width_frac: 0.7
+
+# ---------------------------------------------------------------------------
+# Lane Departure / Lane-keeping Assist (LTA)
+# ---------------------------------------------------------------------------
+lane_departure:
+  enabled: true
+  # Ego lateral position within lane is 0.0 (centre) .. 1.0 (on the line).
+  # Departure fires when |offset| exceeds warn_offset for min_frames.
+  warn_offset: 0.72
+  reset_offset: 0.55                 # hysteresis: must recover below this
+  min_frames: 3                      # debounce before firing
+  # Suppress lane-departure when a turn signal / intentional maneuver is likely
+  # (heuristic: sharp lane curvature). Prevents false warnings on curves.
+  suppress_on_curve: true
+  curve_curvature_min_m: 60.0
+  left:
+    icon: "LTA-left_lanes.png"
+    color: "too_close"               # orange
+    message: "LANE DEPARTURE, Drifting Left"
+  right:
+    icon: "LTA-right_lanes.png"
+    color: "too_close"
+    message: "LANE DEPARTURE, Drifting Right"
+
+# ---------------------------------------------------------------------------
+# Direction / road-geometry info icons (lowest priority, informational)
+# ---------------------------------------------------------------------------
+direction:
+  enabled: true
+  # Classify road ahead from lane curvature (radius in metres) & heading.
+  straight:
+    icon: "straight.png"
+    color: "safe"
+    message: "ROAD AHEAD CLEAR"
+    curvature_min_m: 200.0           # radius above this = straight
+  left_turn:
+    icon: "left_turn.png"
+    color: "lane_normal"             # blue info
+    message: "LEFT CURVE AHEAD"
+  right_turn:
+    icon: "right_turn.png"
+    color: "lane_normal"
+    message: "RIGHT CURVE AHEAD"
+  # Roundabout heuristic: strong sustained curvature.
+  roundabout_curvature_max_m: 30.0
+
+# ---------------------------------------------------------------------------
+# Alert priority + on-screen icon behaviour (drives alert_manager.py)
+# One main icon shows at a time by priority (higher number wins):
+#   Collision > Pedestrian > Lane Departure > Direction
+# ---------------------------------------------------------------------------
+priority:
+  collision: 40
+  pedestrian: 30
+  lane_departure: 20
+  direction: 10
+
+icon_behaviour:
+  # Anti-flicker: once shown, an icon stays at least this long.
+  min_display_time_s: 0.8
+  # Smooth fade in/out.
+  fade_in_s: 0.2
+  fade_out_s: 0.3
+  # Pulse animation speeds (Hz) referenced by pulse: slow|fast.
+  pulse_slow_hz: 1.5
+  pulse_fast_hz: 4.0
+  # Icon draw size (px) in the center-top position.
+  icon_size: [96, 96]
+  # Max simultaneous warnings listed in the bottom bar.
+  max_active_warnings: 4
+
+# ---------------------------------------------------------------------------
+# Audio alerts (optional; wav files under src/assets/sounds if present)
+# ---------------------------------------------------------------------------
+audio:
+  enabled: false
+  collision_wav: "src/assets/sounds/collision.wav"
+  pedestrian_wav: "src/assets/sounds/pedestrian.wav"
+  lane_wav: "src/assets/sounds/lane.wav"
+  cooldown_s: 2.0

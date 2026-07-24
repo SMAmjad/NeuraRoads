@@ -1,0 +1,40 @@
+# =============================================================================
+# NeuraRoads ADAS - .gitattributes
+# Normalise line endings and mark binary / large-file types.
+# =============================================================================
+
+# Auto-detect text files and normalise to LF in the repo.
+* text=auto eol=lf
+
+# Windows shell / batch files keep CRLF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell scripts must stay LF (they run on Linux / Jetson).
+*.sh text eol=lf
+
+# Explicit text types.
+*.py    text
+*.md    text
+*.yaml  text
+*.yml   text
+*.txt   text
+*.json  text
+*.cfg   text
+
+# Binary assets (no diff / no EOL munging).
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.mp4   binary
+*.avi   binary
+*.pt    binary
+*.pth   binary
+*.onnx  binary
+*.engine binary
+
+# Jupyter notebooks: treat as text but don't try to merge.
+*.ipynb text merge=nbmerge
+
+# Git LFS candidates (enable with `git lfs track` if you use LFS):
+#   *.pt, *.onnx, *.engine, *.mp4, data/datasets/**

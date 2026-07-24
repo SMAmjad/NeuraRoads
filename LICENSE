@@ -1,0 +1,42 @@
+NeuraRoads ADAS - Proprietary Software License
+================================================
+
+Copyright (c) 2026 NeuraRoads. All rights reserved.
+
+This software and its associated documentation, source code, configuration and
+trained models (the "Software") are the confidential and proprietary property of
+NeuraRoads and its licensed client. The Software is delivered under a commercial
+engagement and is NOT open-source.
+
+Permitted use
+-------------
+The client identified in the delivery agreement is granted a non-exclusive,
+non-transferable license to use, run, modify and deploy the Software for its own
+internal advanced driver-assistance purposes.
+
+Restrictions
+------------
+Except as expressly permitted in writing by NeuraRoads, you may not:
+  1. redistribute, sublicense, sell or publicly release the Software or any
+     substantial part of it;
+  2. remove or alter any copyright, attribution or proprietary notices;
+  3. use the Software to provide a competing commercial product or service.
+
+Third-party components
+----------------------
+The Software depends on third-party open-source packages (e.g. PyTorch,
+Ultralytics YOLO, OpenCV, and others listed in requirements.txt), each of which
+is governed by its own license. Those licenses continue to apply to their
+respective components.
+
+Safety disclaimer
+-----------------
+This Software is a driver-ASSISTANCE aid. It does not replace a licensed, alert
+human driver and must not be relied upon as an autonomous or fail-safe system.
+Distance, speed, time-to-collision and lane outputs are estimates and may be
+inaccurate under adverse conditions. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT
+WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR ITS USE.

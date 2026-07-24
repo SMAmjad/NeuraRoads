@@ -1,0 +1,32 @@
+# =============================================================================
+# NeuraRoads ADAS - Ultralytics YOLO dataset descriptor
+# -----------------------------------------------------------------------------
+# Consumed by src/training/train_yolo.py and src/training/validate.py.
+# Paths are resolved relative to `path`, so this file is portable across
+# machines as long as the folder layout under data/datasets stays the same.
+# =============================================================================
+
+# Root of the dataset. Absolute path is used so training works regardless of
+# the current working directory. Edit only if you move data/datasets.
+path: I:/Projects/A.I M.L/NeuraRoads/data/datasets
+
+train: images/train      # 20,000 images
+val: images/val          # 2,000 images
+test: images/test        # currently empty; val is used for final metrics
+
+# Number of classes.
+nc: 10
+
+# Class names. Order MUST match the numeric label indices in the .txt files
+# and the order in data/annotations/classes.txt.
+names:
+  0: Bicycle
+  1: Bus
+  2: Car
+  3: Bike
+  4: Pedestrian
+  5: Ped on Bike
+  6: Traffic Light
+  7: Sign Board
+  8: Train
+  9: Truck

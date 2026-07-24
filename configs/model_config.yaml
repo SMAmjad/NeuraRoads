@@ -1,0 +1,349 @@
+# =============================================================================
+# NeuraRoads ADAS - Master configuration
+# -----------------------------------------------------------------------------
+# Central knobs for detection, tracking, distance, speed, lane, BEV and the
+# runtime pipeline. NOTHING in the codebase is hardcoded: every module receives
+# the relevant slice of this file via src/utils/config_loader.py.
+#
+# Loaded by: src/utils/config_loader.py  ->  ConfigLoader.load("model_config")
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# project: paths + global runtime
+# ---------------------------------------------------------------------------
+project:
+  name: "NeuraRoads ADAS"
+  version: "1.0.0"
+  root: "I:/Projects/A.I M.L/NeuraRoads"     # absolute project root
+  # Device is AUTO-DETECTED at runtime (see device.mode). Never hardcode cuda.
+  seed: 42
+
+device:
+  # auto  -> use CUDA if torch.cuda.is_available() else CPU
+  # cuda  -> force GPU (errors clearly if unavailable)
+  # cpu   -> force CPU
+  mode: "auto"
+  gpu_index: 0
+  # Mixed precision (FP16) for inference. Big speed win on the 1660 SUPER.
+  half_precision: true
+  # cudnn benchmark picks the fastest conv algorithms for fixed input sizes.
+  cudnn_benchmark: true
+
+# ---------------------------------------------------------------------------
+# detector: YOLOv8 (trained from scratch on the 10 NeuraRoads classes)
+# ---------------------------------------------------------------------------
+detector:
+  # Architecture used for from-scratch training. yolov8m = highest accuracy of
+  # the realtime options (client chose accuracy; 30-40 FPS acceptable).
+  architecture: "yolov8m"
+  # Model file actually loaded for INFERENCE. Resolution order handled in
+  # src/core/detector.py:
+  #   1) an exported engine/onnx if present (fast path)
+  #   2) the trained .pt below
+  weights: "models/trained/neuraroads_yolov8m/weights/best.pt"
+  # Optional accelerated engines (auto-used if the file exists).
+  tensorrt_engine: "models/weights/neuraroads_yolov8m.engine"
+  onnx_model: "models/weights/neuraroads_yolov8m.onnx"
+  # Preferred backend: auto|pytorch|onnx|tensorrt. auto picks the fastest
+  # available file (tensorrt > onnx > pytorch).
+  backend: "auto"
+
+  imgsz: 512                 # matches the from-scratch TRAINING resolution (512)
+                             # -> faster than 640 with no accuracy loss (640 was
+                             # upscaling beyond what the model ever saw).
+  conf_threshold: 0.25       # min confidence to keep a detection
+  iou_threshold: 0.45        # NMS IoU
+  max_detections: 300        # cap per frame
+  agnostic_nms: false
+  # Classes to keep at inference (null = all 10). Example to drop Train: [0..7,9]
+  keep_classes: null
+
+  # 10 NeuraRoads classes. MUST match data/annotations/classes.txt and
+  # data/annotations/data.yaml. Index = training label id.
+  class_names:
+    0: "Bicycle"
+    1: "Bus"
+    2: "Car"
+    3: "Bike"
+    4: "Pedestrian"
+    5: "Ped on Bike"
+    6: "Traffic Light"
+    7: "Sign Board"
+    8: "Train"
+    9: "Truck"
+
+  # Semantic groupings used across the pipeline (never hardcode class ids).
+  groups:
+    vehicles: [1, 2, 3, 8, 9]         # Bus, Car, Bike, Train, Truck
+    vulnerable: [0, 4, 5]             # Bicycle, Pedestrian, Ped on Bike
+    two_wheelers: [0, 3, 5]           # Bicycle, Bike, Ped on Bike
+    pedestrians: [4, 5]               # Pedestrian, Ped on Bike
+    infrastructure: [6, 7]            # Traffic Light, Sign Board
+    # Objects that participate in forward-collision logic (things we can hit).
+    collision_relevant: [0, 1, 2, 3, 4, 5, 8, 9]
+
+# ---------------------------------------------------------------------------
+# tracker: ByteTrack (client-approved) - stable unique IDs, no appearance net
+# ---------------------------------------------------------------------------
+tracker:
+  type: "bytetrack"                 # bytetrack | botsort (both provided)
+  track_high_thresh: 0.5            # first association confidence
+  track_low_thresh: 0.1            # second association (recovers occluded)
+  new_track_thresh: 0.6            # min conf to start a brand-new track
+  track_buffer: 30                # frames to keep a lost track alive
+  match_thresh: 0.8               # IoU match threshold
+  fuse_score: true                # fuse detection score into association
+  min_box_area: 10                # ignore tiny boxes
+  frame_rate: 30                  # updated at runtime from the video FPS
+
+# ---------------------------------------------------------------------------
+# distance_estimator: monocular pinhole using known real object heights
+# ---------------------------------------------------------------------------
+distance_estimator:
+  method: "pinhole"                # pinhole | bev (bev uses camera_calibration)
+  # Real-world object heights (metres). Client-provided values are authoritative.
+  # Keyed by class id. Missing classes fall back to default_height.
+  real_heights_m:
+    0: 1.0     # Bicycle
+    1: 3.2     # Bus
+    2: 1.5     # Car
+    3: 1.2     # Bike (Motorcycle)
+    4: 1.7     # Pedestrian
+    5: 1.7     # Ped on Bike (person height dominates)
+    6: 0.8     # Traffic Light (housing)
+    7: 0.9     # Sign Board
+    8: 3.8     # Train (use truck-like tall profile)
+    9: 3.8     # Truck
+  default_height_m: 1.5
+  # Clamp implausible outputs (metres).
+  min_distance_m: 1.0
+  max_distance_m: 250.0
+  # Exponential smoothing on per-track distance (0=no smoothing,1=frozen).
+  smoothing_alpha: 0.4
+  # Prefer width-based estimate for objects wider than tall (rare); default off.
+  use_width_fallback: true
+
+# ---------------------------------------------------------------------------
+# speed_estimator: distance-derivative + per-track Kalman (client-approved)
+# ---------------------------------------------------------------------------
+speed_estimator:
+  method: "distance_kalman"
+  # Kalman constant-velocity model process/measurement noise. Higher measurement
+  # noise = trust the motion model more, react less to per-frame bbox jitter =>
+  # steadier on-screen object speeds (distance-derivative speed is inherently
+  # noisy from a single camera).
+  kalman_process_noise: 1.0
+  kalman_measurement_noise: 8.0
+  # Extra output smoothing (EMA) on top of Kalman for a stable on-screen number.
+  ema_alpha: 0.25
+  # Minimum observations before a speed is trusted/displayed (steadier numbers).
+  min_track_age: 5
+  # Relative speed clamp (km/h) to reject glitches (forward traffic rarely
+  # exceeds this closing/opening speed; keeps a bad frame from showing +236 km/h).
+  max_rel_speed_kmh: 120.0
+  # Ego-speed via optical flow of the STATIC ground plane. Uses camera
+  # calibration for a metric, scale-free estimate and masks out detected
+  # vehicles so it tracks the road, not other cars.
+  ego:
+    enabled: true
+    method: "optical_flow"          # optical_flow | manual | gps(future)
+    max_corners: 200
+    quality_level: 0.01
+    min_corner_distance: 12
+    # Road ROI (fractions of frame): a lower-central wedge where the road
+    # surface / lane markings stream past and vehicles are least likely.
+    road_roi_top: 0.62              # top of ROI (below the horizon)
+    road_roi_bottom: 0.94           # bottom (above any bonnet/hood)
+    road_roi_x_frac: 0.55           # central width fraction
+    # Reject per-frame ground displacements above this (m) as flow outliers.
+    max_ground_disp_m: 5.0
+    # Clamp the final ego speed (km/h).
+    max_ego_speed_kmh: 200.0
+    # Fallback px/frame -> km/h scale used ONLY when no calibration is available.
+    flow_to_kmh_scale: 0.65
+    ema_alpha: 0.25
+    manual_speed_kmh: 0.0           # used when method: manual
+    # Run corner-finding + optical flow at this fraction of frame size (0.5 =
+    # 4x fewer pixels, ~3x faster speed stage; rows mapped back for accuracy).
+    flow_downscale: 0.5
+
+# ---------------------------------------------------------------------------
+# lane_detector: hybrid (deep primary + classical fallback + temporal smoothing)
+# ---------------------------------------------------------------------------
+lane_detector:
+  # hybrid = try deep model, fall back to classical, always temporally smooth.
+  mode: "hybrid"                    # hybrid | deep | classical
+  deep:
+    enabled: true
+    # YOLOP (BDD100K) ONNX: drivable-area + lane-line segmentation in one pass.
+    # Robust to curves/roundabouts/night/rain/faded/no-markings - the client's
+    # hard cases - and runs GPU-accelerated via onnxruntime (Jetson: use the
+    # 320 model in the jetson overlay). ufldv2 is still selectable as an option.
+    architecture: "yolop"           # yolop | ufldv2
+    # 320 is the balanced default (~43 ms on a GTX 1660); switch to
+    # yolop-640-640.onnx + input_size [640,640] for max quality on a stronger GPU.
+    weights: "models/weights/yolop-320-320.onnx"
+    input_size: [320, 320]          # [h, w] network input (letterboxed)
+    lane_conf: 0.5                  # lane-line mask threshold (after temporal EMA)
+    drive_conf: 0.5                 # drivable-area mask threshold
+    mask_ema_alpha: 0.5             # temporal smoothing of masks (anti-flicker)
+    # If weights are missing or inference fails, auto-fall back to classical.
+    fallback_on_error: true
+  classical:
+    enabled: true                   # also the fallback for `deep`
+    # Region of interest as fractions of frame (trapezoid), tuned for dashcam.
+    # A wider top is essential: too narrow and only ONE boundary falls inside the
+    # warp, so the ego lane never forms a pair. 0.40/0.95 recovers both lines.
+    roi_top_y: 0.60
+    roi_bottom_y: 0.95
+    roi_top_width: 0.40
+    roi_bottom_width: 0.95
+    canny_low: 50
+    canny_high: 150
+    hough_threshold: 30
+    hough_min_line_len: 20
+    hough_max_line_gap: 120
+    # Adaptive white/yellow masks (HLS+LAB) for night/rain/faded markings.
+    use_color_masks: true
+    # Fold in raw edges ONLY when colour finds fewer than min_color_pixels
+    # (faded lines / dusk); keeps tree & guard-rail clutter out otherwise.
+    use_edges_assist: true
+    min_color_pixels: 1500
+    # Temporal accumulation of the warped mask (knits dashed lines into solid
+    # ones so BOTH boundaries are recovered). decay: higher = longer memory.
+    accum_decay: 0.8
+    accum_thresh: 40
+    # Fall back to road-EDGE detection when no lane markings are found.
+    road_edge_fallback: true
+    # Plausibility / draw gating (stops lanes "flying into the sky"):
+    #   draw_top_frac      - only draw the near field below this warped-height
+    #                        fraction (trims the unreliable far/horizon zone).
+    #   min/max_lane_width - accepted lane width at the base, as a frame-width frac.
+    #   max_lane_dx_frac   - max horizontal wander of a line across the drawn
+    #                        height (rejects near-horizontal building/kerb fits).
+    draw_top_frac: 0.35
+    min_lane_width_frac: 0.25
+    max_lane_width_frac: 1.30
+    max_lane_dx_frac: 0.55
+    # Require BOTH boundaries to draw a lane ("clean lane or nothing"); a lone
+    # line (kerb / guard-rail / dashboard edge) reads as messy. Smoother bridges
+    # brief gaps. Set false to also draw a strongly-vertical single line.
+    require_pair: true
+    max_single_dx_frac: 0.30
+  smoothing:
+    # Temporal smoothing so lanes never flicker/jump between frames.
+    enabled: true
+    method: "kalman_poly"           # kalman on polynomial coefficients
+    ema_alpha: 0.35
+    max_frames_missing: 8           # keep last good lane this many frames
+    curvature_min_m: 50.0           # below this => treat as curve (direction hint)
+
+# ---------------------------------------------------------------------------
+# bev_transformer: top-down bird's-eye-view mini-map
+# ---------------------------------------------------------------------------
+bev:
+  enabled: true
+  # Output BEV canvas size (px) drawn into the video corner.
+  output_size: [300, 400]           # [w, h]
+  # Metres covered by the BEV window (real-world footprint).
+  range_m:
+    forward: 60.0                   # metres ahead of ego
+    lateral: 20.0                   # metres to each side
+  # Source trapezoid (fractions of frame) mapped to the BEV rectangle. Overridden
+  # by camera_calibration.yaml homography when calibrated.
+  src_trapezoid:
+    top_y: 0.62
+    bottom_y: 0.98
+    top_width: 0.20
+    bottom_width: 1.00
+  # Run BEV every N frames and interpolate (cadence control for FPS budget).
+  update_every: 1
+  draw_grid: true
+  ego_color: [0, 255, 255]
+  # Ego-lane width (m) drawn as the shaded road corridor in the top-down view.
+  lane_width_m: 3.7
+  # Real footprint [width_m, length_m] per class -> scaled top-down vehicle icons.
+  # "_ego" is the ego car; "default" covers any class not listed.
+  object_sizes_m:
+    default: [1.9, 4.5]
+    _ego: [1.9, 4.6]
+    Car: [1.9, 4.5]
+    Bus: [2.6, 12.0]
+    Truck: [2.6, 9.0]
+    Train: [3.0, 20.0]
+    Bike: [0.8, 2.2]
+    Bicycle: [0.7, 1.8]
+    Pedestrian: [0.6, 0.6]
+    Ped on Bike: [0.8, 2.0]
+    Traffic Light: [0.6, 0.6]
+    Sign Board: [0.6, 0.6]
+
+# ---------------------------------------------------------------------------
+# runtime pipeline: threading, cadence, FPS-budget controls
+# ---------------------------------------------------------------------------
+pipeline:
+  target_fps: 60
+  process_width: 1280               # internal processing width (letterboxed)
+  process_height: 720
+  # Decouple heavy stages to protect FPS. Lane/BEV can run at a lower cadence
+  # and be interpolated; detection+tracking run every frame.
+  cadence:
+    detection_every: 1
+    lane_every: 3                   # YOLOP every 3rd frame (masks are EMA-smoothed
+                                    # + held between, so this is imperceptible)
+    bev_every: 1
+  threading:
+    enabled: true                   # threaded frame reader + writer
+    queue_size: 8
+  # If measured FPS drops below this for a sustained period, auto-reduce load
+  # (raise lane_every, shrink imgsz). See src/pipeline/realtime_pipeline.py.
+  adaptive_quality:
+    enabled: true
+    min_fps: 25
+    check_interval_s: 2.0
+
+# ---------------------------------------------------------------------------
+# video I/O + output rendering
+# ---------------------------------------------------------------------------
+video:
+  # null = write the output at the SOURCE video's FPS so playback speed is
+  # correct (a 30 FPS clip written into a 60 FPS container plays 2x too fast).
+  # Set an explicit number only for a true real-time/live target.
+  output_fps: null
+  output_codec: "mp4v"              # mp4v (portable) | avc1 | XVID
+  output_dir: "src/results/videos/output_videos"
+  # Show a live preview window during video/webcam inference.
+  show_preview: true
+  # Save per-frame performance log alongside the output.
+  save_metrics: true
+  metrics_dir: "src/results/metrics/performance_logs"
+
+# ---------------------------------------------------------------------------
+# visualization: colours, fonts, HUD layout (drives src/utils/visualization.py)
+# ---------------------------------------------------------------------------
+visualization:
+  icons_dir: "data/icons"           # the 9 ADAS PNGs live here
+  font: "src/assets/fonts"          # optional TTF dir; falls back to cv2 Hershey
+  # Danger colour ramp for bounding boxes (BGR).
+  colors:
+    safe: [0, 200, 0]               # green  - far/safe
+    getting_close: [0, 220, 220]    # yellow - approaching
+    too_close: [0, 140, 255]        # orange - close
+    danger: [0, 0, 255]             # red    - imminent
+    lane_normal: [255, 160, 0]      # blue-ish for normal lane lines
+    lane_leaving: [0, 0, 255]       # red when leaving lane
+    drivable: [0, 170, 0]           # green shade for YOLOP drivable area
+    text: [255, 255, 255]
+    hud_bg: [20, 20, 20]
+    ego: [0, 255, 255]
+  box_thickness: 2
+  font_scale: 0.5
+  # Lightly shade the drivable lane area.
+  lane_fill_alpha: 0.25
+  # HUD elements (top bar / bottom bar / bev / icon) toggles.
+  hud:
+    top_bar: true
+    bottom_bar: true
+    bev_corner: "top_right"         # top_right | top_left
+    icon_center_top: true
+    closest_objects_count: 3        # bottom bar bar-graph size

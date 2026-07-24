@@ -1,0 +1,33 @@
+# =============================================================================
+# NeuraRoads ADAS - docker-compose for the GPU inference API.
+# Run from the PROJECT ROOT:
+#   docker compose -f src/deployment/docker/docker-compose.yml up --build
+#
+# Requires the NVIDIA Container Toolkit on the host.
+# =============================================================================
+services:
+  neuraroads-api:
+    build:
+      context: ../../..                       # project root
+      dockerfile: src/deployment/docker/Dockerfile
+    image: neuraroads:latest
+    container_name: neuraroads-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Set to "1" to serve before the detector is trained (lane/ego/HUD only).
+      NR_ALLOW_NO_DETECTOR: "0"
+      # NR_OVERLAY: "jetson_config"
+    volumes:
+      # Mount trained weights and datasets at runtime (kept out of the image).
+      - ../../../models:/app/models
+      - ../../../data/datasets:/app/data/datasets
+      - ../../../src/results:/app/src/results
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped

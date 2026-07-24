@@ -1,0 +1,78 @@
+# =============================================================================
+# NeuraRoads ADAS - Python dependencies
+# -----------------------------------------------------------------------------
+# Target: Windows 10 x64, Python 3.12, NVIDIA GTX 1660 SUPER (CUDA / Turing 7.5)
+#
+# INSTALL ORDER MATTERS. PyTorch must be installed from the CUDA wheel index,
+# otherwise pip pulls the CPU-only build and the GPU sits idle.
+#
+#   1) GPU PyTorch (run this FIRST, once):
+#        pip install torch==2.5.1+cu121 torchvision==0.20.1+cu121 \
+#            --index-url https://download.pytorch.org/whl/cu121
+#
+#   2) Everything else:
+#        pip install -r requirements.txt
+#
+# The torch/torchvision lines below are pinned with the +cu121 local version so
+# that a plain `pip install -r requirements.txt` also resolves the CUDA build
+# from the extra index declared on the first line.
+# =============================================================================
+
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+# ---- Deep learning core (CUDA build) ----------------------------------------
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
+
+# ---- Detection / tracking (YOLOv8 + ByteTrack live inside ultralytics) -------
+ultralytics==8.3.40
+lapx>=0.5.11             # linear assignment used by ByteTrack/BoT-SORT
+
+# ---- Classic CV / numerics --------------------------------------------------
+# NOTE: albumentations depends on opencv-python-headless, which collides with
+# the full opencv-python (both own the `cv2` namespace) and strips cv2.imshow
+# needed for webcam preview. After `pip install -r requirements.txt` run once:
+#     pip uninstall -y opencv-python opencv-python-headless
+#     pip install --no-cache-dir opencv-python==4.10.0.84
+# (src/scripts/setup_environment.sh does this automatically.)
+opencv-python==4.10.0.84
+numpy==1.26.4            # <2.0 for broad compatibility with cv2 / ultralytics
+scipy==1.14.1           # Kalman helpers, signal smoothing, geometry
+filterpy==1.4.5         # Kalman filters for speed/lane temporal smoothing
+shapely==2.0.6          # lane / danger-zone polygon geometry
+
+# ---- Data handling / augmentation -------------------------------------------
+albumentations==1.4.21  # training-time augmentation
+pandas==2.2.3           # metrics tables and performance logs
+Pillow==11.0.0
+
+# ---- Config / logging / UX --------------------------------------------------
+PyYAML==6.0.2
+loguru==0.7.2           # project-wide logging (no print statements)
+tqdm==4.67.1
+rich==13.9.4            # pretty console tables in benchmarks
+
+# ---- Model export / acceleration --------------------------------------------
+onnx==1.17.0
+onnxruntime-gpu==1.20.1 # reliable GPU acceleration path on Windows
+onnxslim==0.1.44        # graph simplification during export
+# tensorrt                # OPTIONAL: for .engine export on Windows install the
+#                         # matching NVIDIA TensorRT wheel manually, then
+#                         # `python src/scripts/convert_to_tensorrt.py`.
+
+# ---- Visualization / analysis (notebooks, plots) ----------------------------
+matplotlib==3.9.2
+seaborn==0.13.2
+psutil==6.1.0           # CPU/RAM sampling for benchmarks
+
+# ---- Deployment API (src/deployment/api) ------------------------------------
+fastapi==0.115.5
+uvicorn==0.32.1
+python-multipart==0.0.17 # file uploads for the inference endpoint
+
+# ---- Notebooks --------------------------------------------------------------
+jupyter==1.1.1
+ipykernel==6.29.5
+
+# ---- Testing ----------------------------------------------------------------
+pytest==8.3.4

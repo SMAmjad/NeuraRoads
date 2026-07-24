@@ -1,0 +1,78 @@
+# =============================================================================
+# NeuraRoads ADAS - Camera calibration
+# -----------------------------------------------------------------------------
+# Intrinsics, mounting geometry, distortion and the ground-plane homography used
+# by distance estimation, ego-speed scaling and the bird's-eye-view transform.
+#
+# These are SENSIBLE DEFAULTS for a typical 1080p dashcam with a ~70 deg
+# horizontal FOV. For best distance/speed accuracy, run:
+#     python src/scripts/calibrate_camera.py --help
+# which refines these values from a chessboard or known-distance references and
+# rewrites this file.
+#
+# Loaded by: ConfigLoader.load("camera_calibration")
+# =============================================================================
+
+# Resolution these parameters were calibrated at. If the input video differs,
+# intrinsics are rescaled automatically in src/utils/calibration.py.
+calibrated_resolution: [1920, 1080]     # [width, height]
+
+# ---------------------------------------------------------------------------
+# Intrinsics (pixels). fx/fy focal length, cx/cy principal point.
+# Default assumes ~70 deg HFOV: fx = (W/2) / tan(HFOV/2) ~= 1371 at 1920 wide.
+# ---------------------------------------------------------------------------
+intrinsics:
+  fx: 1371.0
+  fy: 1371.0
+  cx: 960.0
+  cy: 540.0
+  # Horizontal field of view (degrees) - used if fx/fy must be re-derived.
+  horizontal_fov_deg: 70.0
+
+# ---------------------------------------------------------------------------
+# Lens distortion (OpenCV plumb-bob). Zeros = assume rectified/low distortion.
+# ---------------------------------------------------------------------------
+distortion:
+  enabled: false
+  k1: 0.0
+  k2: 0.0
+  p1: 0.0
+  p2: 0.0
+  k3: 0.0
+
+# ---------------------------------------------------------------------------
+# Camera mounting geometry (metres / degrees). Used by the pinhole distance
+# model's horizon check and by ground-plane / BEV projection.
+# ---------------------------------------------------------------------------
+mounting:
+  height_m: 1.25            # camera height above road surface
+  pitch_deg: 0.0           # downward tilt (positive = looking down)
+  yaw_deg: 0.0
+  roll_deg: 0.0
+  # Vertical image row (fraction of height) where the road horizon sits.
+  # Objects above this are treated as sky/background for ground projection.
+  horizon_y_frac: 0.52
+
+# ---------------------------------------------------------------------------
+# Ground-plane homography (image <-> top-down metric BEV).
+# If `computed` is false, src/core/bev_transformer.py derives H from the
+# src_trapezoid in model_config + this mounting geometry. calibrate_camera.py
+# can compute and store an explicit 3x3 matrix here.
+# ---------------------------------------------------------------------------
+homography:
+  computed: false
+  # Row-major 3x3 image->BEV matrix (only used when computed: true).
+  matrix: null
+  # Metres-per-pixel of the BEV output when explicit matrix is used.
+  bev_meters_per_pixel: 0.05
+
+# ---------------------------------------------------------------------------
+# Speed calibration. Converts optical-flow px/frame to km/h for ego speed and
+# scales relative-speed estimates. Refined by calibrate_camera.py using a clip
+# of known speed.
+# ---------------------------------------------------------------------------
+speed_calibration:
+  # Overrides model_config.speed_estimator.ego.flow_to_kmh_scale when set.
+  flow_to_kmh_scale: null
+  # Optional known ground-truth for the reference clip (used by calibration).
+  reference_known_speed_kmh: null
