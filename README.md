@@ -255,5 +255,5 @@ Built for a client based in **Hong Kong** as a production dashcam intelligence s
 ## Author
 
 **Sheikh Muhammad Amjad**  
-Software Engineer (AI/ML) at Cubix, Karachi  
+AI/ML Engineer 
 [LinkedIn](https://www.linkedin.com/in/shkmamjad) · [GitHub](https://github.com/SMAmjad) · [Email](mailto:shkmamjad@gmail.com)
